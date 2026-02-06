@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>МАГАЗИН ВТШЕК</title>
+    <style>
+        :root {
+            --dark-bg: #080808;
+            --slot-bg: #121212;
+            --slot-border: #332e2a;
+            --gold: #887241;
+            --muted-gold: #7a6a4a;
+            --text: #b0b0b0;
+            --overlay: rgba(0, 0, 0, 0.9);
+        }
+
+        body {
+            background: var(--dark-bg);
+            color: var(--text);
+            font-family: Georgia, serif;
+            margin: 0;
+            padding: 10px;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        .sticky-header {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(8,8,8,0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 2px solid var(--gold);
+            padding: 8px 15px; margin-bottom: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .total-info { font-size: 1em; color: var(--gold); text-transform: uppercase; }
+        .total-info span { color: #fff; text-shadow: 0 0 10px var(--gold); }
+
+        .btn-action {
+            background: rgba(194,163,93,0.1);
+            border: 1px solid var(--muted-gold);
+            color: var(--gold);
+            padding: 5px 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-size: 0.7em;
+            margin-left: 5px;
+            transition: 0.2s;
+        }
+
+        .btn-action:hover { background: var(--gold); color: #000; }
+
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
+        .item-slot {
+            background: var(--slot-bg);
+            border: 1px solid var(--slot-border);
+            display: flex; flex-direction: column;
+        }
+
+        .item-image-container {
+            aspect-ratio: 1.3/1;
+            background: #000;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; overflow: hidden;
+        }
+
+        .item-image-container img { max-width: 100%; max-height: 100%; object-fit: cover; }
+        .img-fallback { position: absolute; font-size: 1.5em; opacity: 0.1; color: var(--gold); }
+
+        .item-details { padding: 5px; text-align: center; }
+        .item-title { font-size: 0.7em; color: #eee; height: 2.2em; line-height: 1.1; display: flex; align-items: center; justify-content: center; }
+        .item-price { font-size: 0.65em; color: var(--muted-gold); margin-bottom: 5px; }
+
+        .item-input-group { border-top: 1px solid #222; padding-top: 5px; }
+        input[type="number"] { width: 85%; background: #000; border: 1px solid var(--muted-gold); color: var(--gold); text-align: center; padding: 1px; font-size: 0.85em; }
+        .subtotal-tag { font-size: 0.7em; margin-top: 2px; color: var(--gold); font-weight: bold; }
+
+        #orderModal {
+            display: none;
+            position: fixed; z-index: 2000; inset: 0;
+            background: var(--overlay);
+            justify-content: center; align-items: center;
+        }
+
+        .modal-content {
+            background: #151515;
+            border: 2px solid var(--gold);
+            padding: 25px;
+            width: 90%; max-width: 500px;
+            border-radius: 8px;
+        }
+
+        .preview-label {
+            font-size: 0.85em;
+            color: var(--gold);
+            text-transform: uppercase;
+            margin: 18px 0 6px;
+            letter-spacing: 0.5px;
+        }
+
+        .preview-block {
+            background: rgba(0,0,0,0.4);
+            padding: 10px 12px;
+            border: 1px solid var(--muted-gold);
+            border-radius: 6px;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            color: var(--text);
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .total-block {
+            text-align: center;
+            font-size: 1.3em;
+            font-weight: bold;
+            color: var(--gold);
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .form-group select, .form-group textarea {
+            width: 100%; background: #000; border: 1px solid var(--slot-border);
+            color: #fff; padding: 8px; box-sizing: border-box;
+            font-family: serif; border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="sticky-header">
+        <div class="total-info">Сумма: <span id="grandTotal">0</span> <small>кроль</small></div>
+        <div>
+            <button class="btn-action" onclick="openModal()">Заполнить шаблон</button>
+            <button class="btn-action" onclick="resetAll()">Сброс</button>
+        </div>
+    </div>
+
+    <div class="inventory-grid" id="mainGrid"></div>
+</div>
+
+<div id="orderModal">
+    <div class="modal-content">
+        <h2 style="color:var(--gold);text-align:center;font-size:1.2em;margin-top:0;">ДЕТАЛИ СДЕЛКИ</h2>
+        
+        <label class="preview-label">Способ получения</label>
+        <div class="form-group">
+            <select id="orderMethod">
+                <option value="На локации-метро">На локации-метро</option>
+                <option value="Санта-Муерте">Санта-Муерте</option>
+                <option value="Перепись">Перепись</option>
+            </select>
+        </div>
+
+        <label class="preview-label">Примечание</label>
+        <div class="form-group">
+            <textarea id="orderNote" rows="3" placeholder="Какие-либо уточнения..."></textarea>
+        </div>
+
+        <label class="preview-label">Товары</label>
+        <div class="preview-block" id="itemsPreview">—</div>
+
+        <div class="total-block" id="totalPreview">Итоговая сумма: 0 кроль</div>
+
+        <div style="display:flex;justify-content:space-between;margin-top:30px;">
+            <button class="btn-action" onclick="closeModal()">Отмена</button>
+            <button class="btn-action" style="background:var(--gold);color:#000;" onclick="copyTemplate()">СКОПИРОВАТЬ ШАБЛОН</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const items = [
+        {name:"Фиолетовый фонарь",price:40},{name:"Тёмный лёд",price:40},{name:"Тёмный гримуар",price:40},
+        {name:"Пак 'Набор Тьмы'",price:100},{name:"Фонарь Лича",price:40},{name:"Кинжал Лича",price:40},
+        {name:"Гримуар Лича",price:40},{name:"Пак 'Набор Лича'",price:100},{name:"Дайс божественного крита",price:70},
+        {name:"Дайс единиц",price:70},{name:"Дайс божественного тролля",price:50},{name:"Бобрёнок",price:35},
+        {name:"Кусачка опоссум",price:35},{name:"Любопытный воробушек",price:35},{name:"Пятнистый барашек Лаванда",price:35},
+        {name:"Голодная малявка",price:35},{name:"Проказник",price:35},{name:"Разбитый мраморный кинжал",price:35},
+        {name:"Клинок Белой Розы",price:35},{name:"Лживая Алая Роза",price:35},{name:"Пак 'Оружие 1'",price:95},
+        {name:"Обсидиановый нож",price:35},{name:"Боевой топор",price:35},{name:"Проклятый мушкетон",price:35},
+        {name:"Пак 'Оружие 2'",price:95}
+    ];
+
+    let total = 0;
+
+    function createGrid() {
+        const grid = document.getElementById('mainGrid');
+        items.forEach((item, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'item-slot';
+            slot.innerHTML = `
+                <div class="item-image-container">
+                    <div class="img-fallback">⚔</div>
+                    <img src="${item.name}.png" onerror="this.style.display='none'">
+                </div>
+                <div class="item-details">
+                    <div class="item-title">${item.name}</div>
+                    <div class="item-price">${item.price} к.</div>
+                    <div class="item-input-group">
+                        <input type="number" min="0" value="0" id="qty-${i}" oninput="update()">
+                        <div class="subtotal-tag" id="sub-${i}">0</div>
+                    </div>
+                </div>`;
+            grid.appendChild(slot);
+        });
+    }
+
+    function update() {
+        total = 0;
+        items.forEach((item, i) => {
+            const q = parseInt(document.getElementById(`qty-${i}`).value) || 0;
+            const s = q * item.price;
+            document.getElementById(`sub-${i}`).textContent = s;
+            total += s;
+        });
+        document.getElementById('grandTotal').textContent = total;
+        if (document.getElementById('orderModal').style.display === 'flex') updatePreview();
+    }
+
+    function resetAll() {
+        items.forEach((_, i) => {
+            document.getElementById(`qty-${i}`).value = 0;
+            document.getElementById(`sub-${i}`).textContent = 0;
+        });
+        total = 0;
+        document.getElementById('grandTotal').textContent = 0;
+    }
+
+    function getItemsList() {
+        let list = "";
+        items.forEach((item, i) => {
+            const q = parseInt(document.getElementById(`qty-${i}`).value) || 0;
+            if (q > 0) list += `📦 ${item.name} — ${q} шт.\n`;
+        });
+        return list.trim() || "—";
+    }
+
+    function generateTemplate() {
+        const method = document.getElementById('orderMethod').value;
+        const note = document.getElementById('orderNote').value.trim() || "—";
+        const list = getItemsList();
+
+        return `Способ получения: ${method}
+Примечание: ${note}
+━━━━━━━━━━━━━━
+Товары:
+${list}
+━━━━━━━━━━━━━━
+Итоговая сумма: ${total} кроль`;
+    }
+
+    function updatePreview() {
+        document.getElementById('itemsPreview').textContent = getItemsList();
+        document.getElementById('totalPreview').textContent = `Итоговая сумма: ${total} кроль`;
+    }
+
+    function openModal() {
+        if (total === 0) return alert("Вы ничего не выбрали!");
+        updatePreview();
+        document.getElementById('orderModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('orderModal').style.display = 'none';
+    }
+
+    function copyTemplate() {
+        navigator.clipboard.writeText(generateTemplate()).then(() => {
+            alert("Шаблон скопирован в буфер обмена!\nМожете вставить его в чат.");
+            closeModal();
+        }).catch(() => alert("Не удалось скопировать автоматически."));
+    }
+
+    createGrid();
+</script>
+</body>
+</html>
