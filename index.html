@@ -282,7 +282,7 @@
                     <div class="item-title">${item.name}</div>
                     <div class="item-price">${item.price} кроль</div>
                     <div class="item-input-group">
-                        <input type="number" min="0" value="0" id="qty-${i}" oninput="update()">
+                        <input type="number" min="1" value="" id="qty-${i}" oninput="update()">
                         <div class="subtotal-tag" id="sub-${i}">0</div>
                     </div>
                 </div>`;
@@ -351,7 +351,7 @@ ${list}
 
     function copyTemplate() {
         navigator.clipboard.writeText(generateTemplate()).then(() => {
-            alert("Шаблон скопирован в буфер обмена!\nМожете вставить его в чат.");
+            alert("Шаблон скопирован в буфер обмена.");
             closeModal();
         }).catch(() => alert("Не удалось скопировать автоматически."));
     }
