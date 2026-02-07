@@ -338,7 +338,7 @@ function createGrid() {
         let val = parseInt(input.value) || 0;
         val += delta;
         if (val < 0) val = 0;
-        input.value = val > 0 ? val : "";  // если 0 — делаем поле пустым
+        input.value = val > 0 ? val : "";
         update();
     }
 
@@ -405,7 +405,7 @@ ${list}
         navigator.clipboard.writeText(generateTemplate()).then(() => {
             alert("Шаблон скопирован в буфер обмена.");
             closeModal();
-        }).catch(() => alert("Не удалось скопировать автоматически."));
+        }).catch(() => alert("Не скопировалось."));
     }
 
     createGrid();
