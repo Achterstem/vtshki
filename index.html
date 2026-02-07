@@ -81,15 +81,49 @@
         .item-title { font-size: 0.7em; color: var(--muted-gold); height: 2.2em; line-height: 1.1; display: flex; align-items: center; justify-content: center; }
         .item-price { font-size: 1em; color: #afaca8; margin-bottom: 5px; }
 
-        .item-input-group { border-top: 1px solid #222; padding-top: 5px; }
-        input[type="number"] { width: 85%; background: #000; border: 1px solid var(--muted-gold); color: var(--gold); text-align: center; padding: 1px; font-size: 0.85em; }
-        .subtotal-tag { font-size: 0.7em; margin-top: 2px; color: var(--gold); font-weight: bold; }
+        .item-input-group { border-top: 1px solid #222; padding-top: 10px; display: flex; flex-direction: column; align-items: center; }
+        input[type="number"] { width: 85%; background: #000; border: 1px solid var(--muted-gold); color: var(--gold); text-align: center; padding: 1px; font-size: 0.85em; margin-bottom: 6px; -moz-appearance: textfield; }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .subtotal-tag { font-size: 0.7em; margin-top: 6px; color: var(--gold); font-weight: bold; }
 
         #orderModal {
             display: none;
             position: fixed; z-index: 2000; inset: 0;
             background: var(--overlay);
             justify-content: center; align-items: center;
+        }
+
+        .quantity-controls {
+            display: flex;
+            justify-content: center;
+            gap: 50%;
+            width: 85%;
+        }
+
+        .btn-qty {
+            background: rgba(136, 114, 65, 0.3);
+            border: 1px solid var(--muted-gold);
+            color: var(--gold);
+            width: 20px;
+            height: 21px;
+            font-size: 1.4em;
+            line-height: 1;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+        }
+
+        .btn-qty:hover {
+            background: var(--gold);
+            color: #000;
         }
 
         .modal-content {
@@ -237,7 +271,6 @@
     {name:"Чёрный водяной кролик",price:30},
     {name:"Плазменный шар Теслы",price:30},
     {name:"Дитто",price:30},
-    {name:"Бах-бах",price:15},
     {name:"Злая рептилия",price:20},
     {name:"Заключённый",price:20},
     {name:"Пак 'Идентичные'",price:30},
@@ -273,7 +306,7 @@
 
     let total = 0;
 
-    function createGrid() {
+function createGrid() {
         const grid = document.getElementById('mainGrid');
         items.forEach((item, i) => {
             const slot = document.createElement('div');
@@ -287,12 +320,26 @@
                     <div class="item-title">${item.name}</div>
                     <div class="item-price">${item.price} кроль</div>
                     <div class="item-input-group">
-                        <input type="number" min="1" value="" id="qty-${i}" oninput="update()">
+                        <input type="number" min="0" value="" id="qty-${i}" oninput="update()">
+                        <div class="quantity-controls">
+                            <button class="btn-qty" onclick="changeQty(${i}, -1)">−</button>
+                            <button class="btn-qty" onclick="changeQty(${i}, 1)">+</button>
+                        </div>
                         <div class="subtotal-tag" id="sub-${i}">0</div>
                     </div>
                 </div>`;
             grid.appendChild(slot);
         });
+    }
+
+
+    function changeQty(index, delta) {
+        const input = document.getElementById(`qty-${index}`);
+        let val = parseInt(input.value) || 0;
+        val += delta;
+        if (val < 0) val = 0;
+        input.value = val > 0 ? val : "";  // если 0 — делаем поле пустым
+        update();
     }
 
     function update() {
