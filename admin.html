@@ -188,12 +188,19 @@
 
     /* ---- сборка картинки пака ---- */
     .pack-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:14px; }
-    .pack-controls select {
-        background:#000; border:1px solid var(--slot-border); color:#fff;
-        padding:8px 10px; border-radius:4px; font-family:'Oswald', sans-serif; font-size:.85em;
-        max-width: 220px;
+    .pack-shop-picker {
+        display:flex; gap:6px; overflow-x:auto; overflow-y:hidden;
+        flex:1 1 auto; min-width:120px; padding:3px;
     }
-    .pack-controls select:focus { outline:none; border-color: var(--gold); }
+    .pack-shop-thumb {
+        flex:0 0 auto; width:42px; height:42px; padding:0;
+        background:#000; border:1px solid var(--slot-border); border-radius:4px;
+        cursor:pointer; display:flex; align-items:center; justify-content:center;
+        overflow:hidden; transition:.15s;
+    }
+    .pack-shop-thumb:hover { border-color: var(--gold); }
+    .pack-shop-thumb img { width:100%; height:100%; object-fit:cover; pointer-events:none; }
+    .pack-shop-empty { font-size:.78em; color: var(--muted-gold); padding:8px 2px; white-space:nowrap; }
     .pack-canvas-wrap { display:flex; justify-content:center; margin-bottom:10px; }
     .pack-canvas {
         position:relative; width:300px; height:300px; max-width:100%;
@@ -218,11 +225,17 @@
         background: rgba(194,91,74,.9); border:1px solid var(--danger); border-radius:50%;
         color:#fff; font-size:11px; line-height:1; cursor:pointer;
     }
+    .pack-layer-flip {
+        position:absolute; top:-9px; left:-9px; width:18px; height:18px; z-index:5;
+        display:flex; align-items:center; justify-content:center;
+        background: rgba(0,0,0,.8); border:1px solid var(--muted-gold); border-radius:50%;
+        color: var(--gold); font-size:11px; line-height:1; cursor:pointer;
+    }
+    .pack-layer-flip:hover { background: var(--gold); color:#000; }
     .pack-layer-resize {
         position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; z-index:5;
         background: var(--gold); border:1px solid #000; border-radius:2px; cursor:nwse-resize;
     }
-    .pack-hint-size { font-size:.75em; color: var(--muted-gold); text-align:center; margin: -4px 0 14px; }
 
     /* ---- прочее ---- */
     .admin-toast {
@@ -276,23 +289,15 @@
 
         <section class="admin-card" id="pack-builder-card" style="margin-top:20px;">
             <h2>Собрать картинку пака</h2>
-            <p class="hint">
-                Добавьте картинки предметов из магазина или с компьютера, перетащите их на холсте
-                и измените размер за нижний правый уголок. Когда всё расставлено — нажмите
-                «Добавить как новый предмет»: снизу появится новая карточка товара с этой картинкой,
-                останется только вписать название и цену и нажать общую кнопку «Сохранить».
-            </p>
             <div class="pack-controls">
-                <select id="pack-source-select"></select>
-                <button type="button" class="btn-action" id="pack-add-from-shop-btn">Добавить из магазина</button>
-                <button type="button" class="btn-action" id="pack-add-from-file-btn">Добавить с компьютера</button>
+                <div class="pack-shop-picker" id="packShopPicker"></div>
+                <button type="button" class="btn-action" id="pack-add-from-file-btn">С компьютера</button>
                 <input type="file" accept="image/*" id="pack-file-input" hidden>
                 <button type="button" class="btn-action danger" id="pack-clear-btn">Очистить холст</button>
             </div>
             <div class="pack-canvas-wrap">
                 <div class="pack-canvas" id="packCanvas"></div>
             </div>
-            <p class="pack-hint-size">Готовая картинка сохраняется в размере 120×120 px (реальный размер на сайте задаётся версткой сайта — это лишь размер файла).</p>
             <button type="button" class="btn-action primary" id="pack-create-btn">Добавить как новый предмет</button>
         </section>
 
@@ -653,9 +658,11 @@ function createItemSlot(item){
   const nameInput = slot.querySelector(".admin-name-input");
   const img = slot.querySelector("img");
   nameInput.addEventListener("input", () => {
-    if(pendingImages.has(slot)) return; // не затираем уже выбранную новую картинку
-    img.src = imgSrcFor(nameInput.value);
-    img.style.display = "";
+    if(!pendingImages.has(slot)){ // не затираем уже выбранную новую картинку
+      img.src = imgSrcFor(nameInput.value);
+      img.style.display = "";
+    }
+    refreshPackShopPicker();
   });
   slot.querySelector(".remove-btn").addEventListener("click", () => {
     if(confirm("Удалить этот предмет? Картинка тоже будет удалена из репозитория при сохранении.")){
@@ -663,7 +670,7 @@ function createItemSlot(item){
       pendingImages.delete(slot);
       if(name) pendingDeletions.add(name);
       slot.remove();
-      refreshPackSourceSelect();
+      refreshPackShopPicker();
     }
   });
   wireCardDrag(slot);
@@ -686,6 +693,7 @@ function createItemSlot(item){
       img.style.display = "";
       uploadBtn.classList.add("has-pending");
       uploadBtn.title = "Новая картинка будет загружена при нажатии «Сохранить»";
+      refreshPackShopPicker();
     }catch(e){
       showToast("Не удалось обработать картинку: " + e.message, true);
     }
@@ -710,7 +718,7 @@ function renderGrid(items){
   grid.innerHTML = "";
   items.forEach(it => grid.appendChild(createItemSlot(it)));
   grid.appendChild(addTile);
-  refreshPackSourceSelect();
+  refreshPackShopPicker();
 }
 
 function collectItemsFromDOM(){
@@ -757,38 +765,36 @@ const PACK_DISPLAY_SIZE = 300;      // размер холста на экран
 const PACK_SCALE = PACK_DISPLAY_SIZE / PACK_EXPORT_SIZE;
 
 const packCanvas = document.getElementById("packCanvas");
-const packSourceSelect = document.getElementById("pack-source-select");
-let packLayers = [];   // { el, x, y, w, h } — координаты и размер в единицах экспорта (0..120)
+const packShopPicker = document.getElementById("packShopPicker");
+let packLayers = [];   // { el, x, y, w, h, flipped } — координаты/размер в единицах экспорта (0..120)
 let packAddCounter = 0; // чтобы новые картинки не ложились ровно друг на друга
 
-// Обновляет список предметов, из которых можно взять картинку — берётся
-// прямо из текущей сетки товаров (включая ещё не сохранённые правки имени).
-function refreshPackSourceSelect(){
-  const names = Array.from(grid.querySelectorAll(".item-slot.is-item .admin-name-input"))
-    .map(inp => inp.value.trim())
-    .filter(Boolean);
-  packSourceSelect.innerHTML = "";
-  if(!names.length){
-    const opt = document.createElement("option");
-    opt.textContent = "Нет предметов в магазине";
-    opt.disabled = true;
-    packSourceSelect.appendChild(opt);
-    return;
-  }
-  names.forEach(name => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    packSourceSelect.appendChild(opt);
+// Обновляет ряд превьюшек предметов, из которых можно взять картинку —
+// берётся прямо из текущей сетки товаров (включая ещё не сохранённые правки).
+function refreshPackShopPicker(){
+  packShopPicker.innerHTML = "";
+  const slots = Array.from(grid.querySelectorAll(".item-slot.is-item"));
+  slots.forEach(slot => {
+    const name = slot.querySelector(".admin-name-input").value.trim();
+    if(!name) return;
+    const src = slot.querySelector("img").src;
+    const thumb = document.createElement("button");
+    thumb.type = "button";
+    thumb.className = "pack-shop-thumb";
+    thumb.title = name;
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = name;
+    thumb.appendChild(img);
+    thumb.addEventListener("click", () => addPackLayer(src, true));
+    packShopPicker.appendChild(thumb);
   });
-}
-packSourceSelect.addEventListener("mousedown", refreshPackSourceSelect);
-packSourceSelect.addEventListener("focus", refreshPackSourceSelect);
-
-function findSlotImgSrc(name){
-  const slot = Array.from(grid.querySelectorAll(".item-slot.is-item"))
-    .find(s => s.querySelector(".admin-name-input").value.trim() === name);
-  return slot ? slot.querySelector("img").src : null;
+  if(!packShopPicker.children.length){
+    const span = document.createElement("span");
+    span.className = "pack-shop-empty";
+    span.textContent = "Нет предметов";
+    packShopPicker.appendChild(span);
+  }
 }
 
 function addPackLayer(src, crossOrigin){
@@ -798,10 +804,9 @@ function addPackLayer(src, crossOrigin){
   const el = document.createElement("div");
   el.className = "pack-layer";
 
-  const startSize = 55;
   const cascade = (packAddCounter % 5) * 12;
   packAddCounter++;
-  const layer = { el, x: 8 + cascade, y: 8 + cascade, w: startSize, h: startSize };
+  const layer = { el, x: 8 + cascade, y: 8 + cascade, w: 55, h: 55, flipped: false };
 
   const applyRect = () => {
     el.style.left = (layer.x * PACK_SCALE) + "px";
@@ -810,6 +815,18 @@ function addPackLayer(src, crossOrigin){
     el.style.height = (layer.h * PACK_SCALE) + "px";
   };
   applyRect();
+
+  // как только картинка загрузилась — подгоняем стартовый размер под её
+  // реальные пропорции (большая сторона = 55), дальше пропорции не ломаются
+  img.onload = () => {
+    const ratio = img.naturalWidth / img.naturalHeight || 1;
+    const maxSide = 55;
+    if(ratio >= 1){ layer.w = maxSide; layer.h = maxSide / ratio; }
+    else { layer.h = maxSide; layer.w = maxSide * ratio; }
+    applyRect();
+  };
+  img.onerror = () => showToast("Не удалось загрузить эту картинку на холст (возможно, её ещё нет в репозитории или мешает CORS).", true);
+  img.src = src;
 
   const removeBtn = document.createElement("div");
   removeBtn.className = "pack-layer-remove";
@@ -821,22 +838,30 @@ function addPackLayer(src, crossOrigin){
     el.remove();
   });
 
+  const flipBtn = document.createElement("div");
+  flipBtn.className = "pack-layer-flip";
+  flipBtn.textContent = "⇋";
+  flipBtn.title = "Отразить по горизонтали";
+  flipBtn.addEventListener("pointerdown", e => e.stopPropagation());
+  flipBtn.addEventListener("click", () => {
+    layer.flipped = !layer.flipped;
+    img.style.transform = layer.flipped ? "scaleX(-1)" : "";
+  });
+
   const resizeHandle = document.createElement("div");
   resizeHandle.className = "pack-layer-resize";
   resizeHandle.title = "Изменить размер";
 
   el.appendChild(img);
   el.appendChild(removeBtn);
+  el.appendChild(flipBtn);
   el.appendChild(resizeHandle);
   packCanvas.appendChild(el);
-
-  img.onerror = () => showToast("Не удалось загрузить эту картинку на холст (возможно, её ещё нет в репозитории или мешает CORS).", true);
-  img.src = src;
 
   // перетаскивание всей картинки
   let dragging = false, startX, startY, startLX, startLY;
   el.addEventListener("pointerdown", e => {
-    if(e.target === resizeHandle || e.target === removeBtn) return;
+    if(e.target === resizeHandle || e.target === removeBtn || e.target === flipBtn) return;
     dragging = true;
     el.classList.add("selected");
     el.setPointerCapture(e.pointerId);
@@ -854,19 +879,23 @@ function addPackLayer(src, crossOrigin){
   el.addEventListener("pointerup", endDrag);
   el.addEventListener("pointercancel", endDrag);
 
-  // изменение размера за уголок (тянем от текущего размера, сохраняя x/y)
-  let resizing = false, rStartX, rStartY, rStartW, rStartH;
+  // изменение размера за уголок — пропорции ширины/высоты картинки не меняются,
+  // тянем только по горизонтали, высота пересчитывается по тому же соотношению
+  let resizing = false, rStartX, rStartW, rStartH;
   resizeHandle.addEventListener("pointerdown", e => {
     resizing = true;
     resizeHandle.setPointerCapture(e.pointerId);
-    rStartX = e.clientX; rStartY = e.clientY;
+    rStartX = e.clientX;
     rStartW = layer.w; rStartH = layer.h;
     e.preventDefault(); e.stopPropagation();
   });
   resizeHandle.addEventListener("pointermove", e => {
     if(!resizing) return;
-    layer.w = Math.max(8, rStartW + (e.clientX - rStartX) / PACK_SCALE);
-    layer.h = Math.max(8, rStartH + (e.clientY - rStartY) / PACK_SCALE);
+    const ratio = rStartW / rStartH;
+    let newW = Math.max(8, rStartW + (e.clientX - rStartX) / PACK_SCALE);
+    let newH = newW / ratio;
+    if(newH < 8){ newH = 8; newW = newH * ratio; }
+    layer.w = newW; layer.h = newH;
     applyRect();
   });
   const endResize = () => { resizing = false; };
@@ -875,14 +904,6 @@ function addPackLayer(src, crossOrigin){
 
   packLayers.push(layer);
 }
-
-document.getElementById("pack-add-from-shop-btn").addEventListener("click", () => {
-  const name = packSourceSelect.value;
-  if(!name) return;
-  const src = findSlotImgSrc(name);
-  if(!src){ showToast("Не удалось найти картинку этого предмета.", true); return; }
-  addPackLayer(src, true);
-});
 
 const packFileInput = document.getElementById("pack-file-input");
 document.getElementById("pack-add-from-file-btn").addEventListener("click", () => packFileInput.click());
@@ -916,7 +937,15 @@ document.getElementById("pack-create-btn").addEventListener("click", () => {
   try{
     for(const layer of packLayers){
       const img = layer.el.querySelector("img");
-      ctx.drawImage(img, layer.x, layer.y, layer.w, layer.h);
+      ctx.save();
+      if(layer.flipped){
+        ctx.translate(layer.x + layer.w, layer.y);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, 0, 0, layer.w, layer.h);
+      }else{
+        ctx.drawImage(img, layer.x, layer.y, layer.w, layer.h);
+      }
+      ctx.restore();
     }
   }catch(e){
     showToast("Не удалось собрать картинку — одна из них блокирует экспорт (CORS). Попробуйте добавить её с компьютера вместо магазина.", true);
@@ -947,7 +976,7 @@ document.getElementById("pack-create-btn").addEventListener("click", () => {
   packLayers.forEach(l => l.el.remove());
   packLayers = [];
   packAddCounter = 0;
-  refreshPackSourceSelect();
+  refreshPackShopPicker();
 
   showToast("Добавлено как новый предмет ниже — впишите название и цену, затем нажмите общую кнопку «Сохранить».");
 });
