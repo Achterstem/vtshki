@@ -139,6 +139,15 @@
     }
     .remove-btn:hover { background: var(--danger); color:#fff; }
 
+    .img-upload-btn {
+        position:absolute; bottom:4px; right:4px; z-index:3;
+        width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+        background: rgba(0,0,0,.55); border:1px solid var(--muted-gold); border-radius:3px;
+        color: var(--gold); font-size:13px; line-height:1; cursor:pointer;
+    }
+    .img-upload-btn:hover { background: var(--gold); color:#000; }
+    .img-upload-btn.has-pending { border-color:#7ac47a; color:#bfe8bf; }
+
     .admin-name-input {
         width:100%; box-sizing:border-box; background:transparent; border:none;
         border-bottom:1px dashed transparent; color: var(--muted-gold); text-align:center;
@@ -215,6 +224,7 @@
     </section>
 
     <div id="admin-main" hidden>
+        <p class="hint" style="margin:0 0 12px;">Иконка <strong>🖼</strong> в углу товара — загрузить или заменить картинку. Изображение обрезается до квадрата 70×70 и при сохранении записывается в репозиторий под именем товара (как указано в поле «Название предмета»).</p>
         <div class="inventory-grid" id="mainGrid"></div>
 
         <section class="admin-card" id="methods-card" style="margin-top:20px;">
@@ -307,13 +317,13 @@ async function ghGetFile(path){
   return { content: b64DecodeUnicode(raw), sha: json.sha };
 }
 
-async function ghPutFile(path, content, sha, message){
+async function ghPutFile(path, content, sha, message, isBase64){
   const { owner, repo, branch } = getConfig();
   const url = `${API_BASE}/repos/${owner}/${repo}/contents/${encodeURI(path)}`;
   const res = await fetch(url, {
     method: "PUT",
     headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ message, branch, sha, content: b64EncodeUnicode(content) })
+    body: JSON.stringify({ message, branch, sha, content: isBase64 ? content : b64EncodeUnicode(content) })
   });
   if(!res.ok){
     let msg = `HTTP ${res.status}`;
@@ -402,6 +412,57 @@ const grid = document.getElementById("mainGrid");
 
 function imgSrcFor(name){ return `https://achterstem.github.io/vtshki/${name}.png`; }
 
+// slot(HTMLElement) -> base64 PNG (без "data:image/png;base64,") для картинок,
+// которые ещё не сохранены в репозиторий
+const pendingImages = new Map();
+
+// Приводит любой выбранный файл-картинку к квадратному PNG нужного размера
+// (обрезка по центру, как у существующих иконок 70×70), возвращает base64.
+function imageFileToSquarePngBase64(file, size){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
+      const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      resolve(canvas.toDataURL("image/png").split(",")[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("не удалось прочитать файл")); };
+    img.src = url;
+  });
+}
+
+// sha файла в репозитории или null, если файла ещё нет
+async function ghGetSha(path){
+  const { owner, repo, branch } = getConfig();
+  const url = `${API_BASE}/repos/${owner}/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(branch)}`;
+  const res = await fetch(url, { headers: authHeaders() });
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error(`Не удалось проверить файл ${path}: HTTP ${res.status}`);
+  const json = await res.json();
+  return json.sha;
+}
+
+// Загружает в репозиторий все картинки, выбранные через 🖼, под именем товара
+async function commitPendingImages(){
+  for(const slot of Array.from(grid.querySelectorAll(".item-slot.is-item"))){
+    const base64 = pendingImages.get(slot);
+    if(!base64) continue;
+    const name = slot.querySelector(".admin-name-input").value.trim();
+    if(!name) continue;
+    const path = `${name}.png`;
+    const sha = await ghGetSha(path);
+    await ghPutFile(path, base64, sha, `Загрузка картинки «${name}» через admin.html`, true);
+    pendingImages.delete(slot);
+    slot.querySelector(".img-upload-btn").classList.remove("has-pending");
+  }
+}
+
 let dragEl = null;
 function wireDrag(handle){
   handle.addEventListener("pointerdown", e => {
@@ -444,6 +505,8 @@ function createItemSlot(item){
     <div class="item-image-container">
       <div class="img-fallback"> </div>
       <img src="${escapeAttr(imgSrcFor(item.name || ""))}" onerror="this.style.display='none'">
+      <button type="button" class="img-upload-btn" title="Загрузить/заменить картинку">🖼</button>
+      <input type="file" accept="image/*" class="admin-img-input" hidden>
     </div>
     <div class="item-details">
       <input type="text" class="admin-name-input" value="${escapeAttr(item.name || "")}" placeholder="Название предмета">
@@ -456,13 +519,38 @@ function createItemSlot(item){
   const nameInput = slot.querySelector(".admin-name-input");
   const img = slot.querySelector("img");
   nameInput.addEventListener("input", () => {
+    if(pendingImages.has(slot)) return; // не затираем уже выбранную новую картинку
     img.src = imgSrcFor(nameInput.value);
     img.style.display = "";
   });
   slot.querySelector(".remove-btn").addEventListener("click", () => {
-    if(confirm("Удалить этот предмет?")) slot.remove();
+    if(confirm("Удалить этот предмет?")){ pendingImages.delete(slot); slot.remove(); }
   });
   wireDrag(slot.querySelector(".drag-handle"));
+
+  const uploadBtn = slot.querySelector(".img-upload-btn");
+  const fileInput = slot.querySelector(".admin-img-input");
+  uploadBtn.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    fileInput.value = "";
+    if(!file) return;
+    if(!file.type.startsWith("image/")){
+      showToast("Выберите файл изображения (PNG, JPG и т.п.).", true);
+      return;
+    }
+    try{
+      const base64 = await imageFileToSquarePngBase64(file, 70);
+      pendingImages.set(slot, base64);
+      img.src = "data:image/png;base64," + base64;
+      img.style.display = "";
+      uploadBtn.classList.add("has-pending");
+      uploadBtn.title = "Новая картинка будет загружена при нажатии «Сохранить»";
+    }catch(e){
+      showToast("Не удалось обработать картинку: " + e.message, true);
+    }
+  });
+
   return slot;
 }
 
@@ -477,6 +565,7 @@ addTile.addEventListener("click", () => {
 });
 
 function renderGrid(items){
+  pendingImages.clear();
   grid.innerHTML = "";
   items.forEach(it => grid.appendChild(createItemSlot(it)));
   grid.appendChild(addTile);
@@ -531,6 +620,7 @@ saveBtn.addEventListener("click", async () => {
   try{
     cache.items.data = items;
     cache.methods.data = collectMethodsFromDOM();
+    await commitPendingImages();
     await commitFile("items", "Обновление товаров через admin.html");
     await commitFile("methods", "Обновление способов получения через admin.html");
     showToast("Сохранено. Сайт обновится за 1–3 минуты.");
