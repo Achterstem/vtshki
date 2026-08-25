@@ -30,7 +30,6 @@
 
     .container { max-width: 1200px; margin: 0 auto; }
 
-    /* ---- topbar (то же место, что и "сумма" на витрине) ---- */
     .sticky-header {
         position: sticky; top: 0; z-index: 100;
         background: rgba(8,8,8,0.95);
@@ -63,7 +62,6 @@
     .btn-action.danger { border-color: var(--danger); color:#f0b3a8; }
     .btn-action.danger:hover { background: var(--danger); color:#fff; }
 
-    /* ---- карточки (подключение / способы получения) ---- */
     .admin-card {
         background: #151515;
         border: 2px solid var(--gold);
@@ -100,7 +98,6 @@
     .admin-status.error { border-color: var(--danger); color:#f0b3a8; }
     .admin-status.info { border-color: var(--muted-gold); }
 
-    /* ---- сетка товаров (визуально идентична витрине) ---- */
     .inventory-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -234,10 +231,6 @@
 <div id="toast" class="admin-toast" hidden></div>
 
 <script>
-/* =========================================================================
-   АДМИНКА — читает и пишет data/items.js и data/methods.js напрямую через
-   GitHub API. Внешний вид витрины (index.html) эта страница не трогает.
-   ========================================================================= */
 
 const API_BASE = new URLSearchParams(location.search).get("apiBase") || "https://api.github.com";
 const CONFIG_KEY = "vtshkiShopAdminConfig_v1";
@@ -257,7 +250,6 @@ function b64DecodeUnicode(str){
   return decodeURIComponent(atob(str).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
 }
 
-// ---------- автоопределение владельца/репозитория по адресу GitHub Pages ----------
 function detectRepoFromLocation(){
   const m = location.hostname.match(/^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.github\.io$/i);
   if(!m) return null;
@@ -289,7 +281,6 @@ function applyAutoDetect(){
   }
 }
 
-// ---------- конфиг / localStorage ----------
 function getConfig(){
   try{ return JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}"); }
   catch(e){ return {}; }
@@ -302,7 +293,6 @@ function authHeaders(){
   return { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" };
 }
 
-// ---------- GitHub API ----------
 async function ghGetFile(path){
   const { owner, repo, branch } = getConfig();
   const url = `${API_BASE}/repos/${owner}/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(branch)}`;
@@ -334,7 +324,6 @@ async function ghPutFile(path, content, sha, message){
   return res.json();
 }
 
-// ---------- описание файлов данных ----------
 const FILES = {
   items: {
     path: "data/items.js",
@@ -367,7 +356,7 @@ const FILES = {
   }
 };
 
-let cache = {}; // { items:{data,sha}, methods:{data,sha} }
+let cache = {}; 
 
 async function loadFile(key){
   const f = FILES[key];
@@ -394,7 +383,6 @@ async function commitFile(key, message){
   cache[key].sha = result.content.sha;
 }
 
-// ---------- UI: статус / тосты ----------
 const statusEl = document.getElementById("connect-status");
 function showStatus(msg, kind){
   statusEl.textContent = msg;
@@ -410,7 +398,6 @@ function showToast(msg, isError){
   toastTimer = setTimeout(() => { toastEl.hidden = true; }, 5000);
 }
 
-// ---------- сетка товаров ----------
 const grid = document.getElementById("mainGrid");
 
 function imgSrcFor(name){ return `https://achterstem.github.io/vtshki/${name}.png`; }
@@ -502,7 +489,6 @@ function collectItemsFromDOM(){
   }));
 }
 
-// ---------- способы получения ----------
 const methodsListEl = document.getElementById("methods-list");
 
 function createMethodRow(value){
@@ -529,7 +515,6 @@ function collectMethodsFromDOM(){
   return Array.from(document.querySelectorAll(".method-input")).map(el => el.value.trim()).filter(Boolean);
 }
 
-// ---------- сохранение ----------
 const saveBtn = document.getElementById("save-btn");
 const reloadBtn = document.getElementById("reload-btn");
 
@@ -576,7 +561,6 @@ document.getElementById("disconnect-link").addEventListener("click", () => {
   location.reload();
 });
 
-// ---------- подключение ----------
 document.getElementById("connect-form").addEventListener("submit", async e => {
   e.preventDefault();
   const owner = document.getElementById("cfg-owner").value.trim();
@@ -613,7 +597,6 @@ document.getElementById("connect-form").addEventListener("submit", async e => {
   }
 });
 
-// ---------- автозаполнение при открытии, если ключ уже сохранён ----------
 (function init(){
   applyAutoDetect();
   const cfg = getConfig();
