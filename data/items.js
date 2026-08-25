@@ -23,6 +23,10 @@ window.SITE_DATA.items = [
     "price": 40
   },
   {
+    "name": "Набор дэбила",
+    "price": 100
+  },
+  {
     "name": "Фиолетовый фонарь",
     "price": 40
   },
