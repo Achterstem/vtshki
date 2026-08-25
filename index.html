@@ -210,17 +210,9 @@
     </div>
 </div>
 
-<!--
-  ПОРЯДОК ПОДКЛЮЧЕНИЯ ВАЖЕН:
-  сначала файлы с данными (data/*.js) — их можно редактировать свободно,
-  затем основной код страницы ниже.
--->
 <script src="data/items.js"></script>
 <script src="data/methods.js"></script>
 <script>
-    // Данные (товары и способы получения) подключаются отдельными файлами
-    // data/items.js и data/methods.js — их можно редактировать вручную или
-    // через admin.html. Этот файл (движок) их не трогает.
     const items = window.SITE_DATA.items;
     const methods = window.SITE_DATA.methods;
 
