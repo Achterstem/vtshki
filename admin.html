@@ -61,6 +61,7 @@
     .btn-action.primary:hover { background:#a08a55; }
     .btn-action.danger { border-color: var(--danger); color:#f0b3a8; }
     .btn-action.danger:hover { background: var(--danger); color:#fff; }
+    .btn-action.toggle-on { background: var(--gold); color:#000; font-weight:600; }
 
     .admin-card {
         background: #151515;
@@ -130,6 +131,19 @@
         color: var(--gold); font-size:13px; cursor: grab; touch-action:none; user-select:none;
     }
     .drag-handle:active { cursor: grabbing; }
+
+    /* ---- режим перестановки (перетаскивание всей карточки) ---- */
+    .inventory-grid.reorder-mode .item-slot.is-item { cursor: grab; }
+    .inventory-grid.reorder-mode .item-slot.is-item.dragging {
+        opacity:.35; outline:2px dashed var(--gold); cursor: grabbing;
+    }
+    .inventory-grid.reorder-mode .item-slot.is-item .item-details,
+    .inventory-grid.reorder-mode .item-slot.is-item .remove-btn,
+    .inventory-grid.reorder-mode .item-slot.is-item .img-upload-btn,
+    .inventory-grid.reorder-mode .item-slot.is-item .drag-handle {
+        pointer-events: none; opacity:.35;
+    }
+    .inventory-grid.reorder-mode .admin-add-tile { opacity:.35; pointer-events:none; }
 
     .remove-btn {
         position:absolute; top:4px; right:4px; z-index:3;
@@ -201,6 +215,7 @@
     <div class="sticky-header">
         <div class="admin-title">Админка магазина<small>Изменения появляются на сайте через 1–5 минут после сохранения!!!</small></div>
         <div>
+            <button type="button" class="btn-action" id="reorder-toggle-btn" hidden>Переставить предметы</button>
             <button type="button" class="btn-action" id="reload-btn" hidden>Обновить из GitHub</button>
             <button type="button" class="btn-action primary" id="save-btn" hidden>Сохранить</button>
         </div>
@@ -223,7 +238,7 @@
     </section>
 
     <div id="admin-main" hidden>
-        <p class="hint" style="margin:0 0 12px;">Иконка 🖼 в углу товара — загрузить или заменить картинку.<br>⠿ - переместить предмет.<br>Клик на название предмета - поменять/задать имя предмету.<br>ЧТОБЫ СЛУЧАЙНО НИЧЕГО НЕ СЛОМАТЬ, ЛУЧШЕ СОХРАНЯТЬ КАЖДОЕ ДЕЙСТВИЕ (удалил предмет - сохранил, создал предмет - сохранил)</p>
+        <p class="hint" style="margin:0 0 12px;">Иконка 🖼 в углу товара — загрузить или заменить картинку.<br>Кнопка «Переставить предметы» вверху — включает режим перестановки: пока он включён, можно тащить всю карточку целиком (а не только за ⠿), чтобы поменять порядок; повторное нажатие выключает режим.<br>Клик на название предмета - поменять/задать имя предмету.<br>ЧТОБЫ СЛУЧАЙНО НИЧЕГО НЕ СЛОМАТЬ, ЛУЧШЕ СОХРАНЯТЬ КАЖДОЕ ДЕЙСТВИЕ (удалил предмет - сохранил, создал предмет - сохранил)</p>
         <div class="inventory-grid" id="mainGrid"></div>
 
         <section class="admin-card" id="methods-card" style="margin-top:20px;">
@@ -531,6 +546,8 @@ async function commitPendingRenames(keepNames){
 }
 
 let dragEl = null;
+let reorderMode = false;
+
 function wireDrag(handle){
   handle.addEventListener("pointerdown", e => {
     const slot = handle.closest(".item-slot.is-item");
@@ -560,6 +577,39 @@ function wireDrag(handle){
   handle.addEventListener("pointercancel", () => {
     if(dragEl) dragEl.classList.remove("dragging");
     dragEl = null;
+  });
+}
+
+// В режиме перестановки (см. reorder-toggle-btn) вся карточка становится
+// ручкой для перетаскивания — не нужно попадать пальцем в маленький ⠿.
+// Пока режим включён, поля и кнопки внутри карточки не кликабельны (см. CSS
+// .reorder-mode), поэтому pointerdown всегда достаётся именно карточке.
+function wireCardDrag(slot){
+  slot.addEventListener("pointerdown", e => {
+    if(!reorderMode) return;
+    dragEl = slot;
+    slot.classList.add("dragging");
+    slot.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  slot.addEventListener("pointermove", e => {
+    if(!reorderMode || dragEl !== slot) return;
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    if(!target) return;
+    const overSlot = target.closest(".item-slot.is-item");
+    if(overSlot && overSlot !== dragEl){
+      const children = Array.from(grid.children);
+      const dragIdx = children.indexOf(dragEl);
+      const overIdx = children.indexOf(overSlot);
+      if(dragIdx < overIdx) grid.insertBefore(dragEl, overSlot.nextSibling);
+      else grid.insertBefore(dragEl, overSlot);
+    }
+  });
+  slot.addEventListener("pointerup", () => {
+    if(dragEl === slot){ slot.classList.remove("dragging"); dragEl = null; }
+  });
+  slot.addEventListener("pointercancel", () => {
+    if(dragEl === slot){ slot.classList.remove("dragging"); dragEl = null; }
   });
 }
 
@@ -600,6 +650,7 @@ function createItemSlot(item){
     }
   });
   wireDrag(slot.querySelector(".drag-handle"));
+  wireCardDrag(slot);
 
   const uploadBtn = slot.querySelector(".img-upload-btn");
   const fileInput = slot.querySelector(".admin-img-input");
@@ -680,6 +731,15 @@ function collectMethodsFromDOM(){
 
 const saveBtn = document.getElementById("save-btn");
 const reloadBtn = document.getElementById("reload-btn");
+const reorderToggleBtn = document.getElementById("reorder-toggle-btn");
+
+function setReorderMode(on){
+  reorderMode = on;
+  grid.classList.toggle("reorder-mode", on);
+  reorderToggleBtn.textContent = on ? "Готово (закончить перестановку)" : "Переставить предметы";
+  reorderToggleBtn.classList.toggle("toggle-on", on);
+}
+reorderToggleBtn.addEventListener("click", () => setReorderMode(!reorderMode));
 
 saveBtn.addEventListener("click", async () => {
   const items = collectItemsFromDOM();
@@ -719,6 +779,7 @@ reloadBtn.addEventListener("click", async () => {
     await loadFile("methods");
     renderGrid(cache.items.data);
     renderMethods(cache.methods.data);
+    setReorderMode(false);
     showToast("Обновлено из GitHub.");
   }catch(e){
     showToast(e.message, true);
@@ -759,6 +820,8 @@ document.getElementById("connect-form").addEventListener("submit", async e => {
     document.getElementById("admin-main").hidden = false;
     saveBtn.hidden = false;
     reloadBtn.hidden = false;
+    reorderToggleBtn.hidden = false;
+    setReorderMode(false);
 
     if(!canPush) showToast("Подключились, но у ключа нет прав на запись. Сохранить изменения не получится.", true);
   }catch(err){
