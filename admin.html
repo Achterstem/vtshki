@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Админка || Магазин втшек</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --dark-bg: #080808;
+        --slot-bg: #121212;
+        --slot-border: #332e2a;
+        --gold: #887241;
+        --muted-gold: #7a6a4a;
+        --text: #b0b0b0;
+        --overlay: rgba(0, 0, 0, 0.9);
+        --danger: #c25b4a;
+    }
+
+    body {
+        background: var(--dark-bg);
+        color: var(--text);
+        font-family: 'Oswald', sans-serif;
+        margin: 0;
+        padding: 10px;
+    }
+
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    /* ---- topbar (то же место, что и "сумма" на витрине) ---- */
+    .sticky-header {
+        position: sticky; top: 0; z-index: 100;
+        background: rgba(8,8,8,0.95);
+        backdrop-filter: blur(10px);
+        border-bottom: 2px solid var(--gold);
+        padding: 8px 15px; margin-bottom: 15px;
+        display: flex; justify-content: space-between; align-items: center;
+        flex-wrap: wrap; gap: 8px;
+    }
+    .admin-title { font-size: 1em; color: var(--gold); text-transform: uppercase; letter-spacing: .03em; }
+    .admin-title small { display:block; color: var(--text); text-transform:none; font-size:.75em; margin-top:2px; }
+
+    .btn-action {
+        font-family: 'Oswald', sans-serif !important;
+        background: rgba(194,163,93,0.1);
+        border: 1px solid var(--muted-gold);
+        color: var(--gold);
+        padding: 5px 12px;
+        cursor: pointer;
+        text-transform: uppercase;
+        font-size: 0.7em;
+        margin-left: 5px;
+        transition: 0.2s;
+        border-radius: 3px;
+    }
+    .btn-action:hover { background: var(--gold); color: #000; }
+    .btn-action:disabled { opacity:.5; cursor:default; }
+    .btn-action.primary { background: var(--gold); color:#000; font-weight:600; }
+    .btn-action.primary:hover { background:#a08a55; }
+    .btn-action.danger { border-color: var(--danger); color:#f0b3a8; }
+    .btn-action.danger:hover { background: var(--danger); color:#fff; }
+
+    /* ---- карточки (подключение / способы получения) ---- */
+    .admin-card {
+        background: #151515;
+        border: 2px solid var(--gold);
+        padding: 20px 22px;
+        border-radius: 8px;
+        margin: 0 0 20px;
+    }
+    .admin-card h2 {
+        color: var(--gold); margin: 0 0 6px; font-size: 1.05em;
+        text-transform: uppercase; letter-spacing: .04em;
+    }
+    .admin-card p.hint { font-size: .85em; margin: 0 0 16px; line-height:1.5; }
+
+    .admin-field { display:block; margin-bottom: 14px; }
+    .admin-field span { display:block; font-size:.78em; color: var(--muted-gold); text-transform:uppercase; letter-spacing:.03em; margin-bottom:5px; }
+    .admin-field input[type="password"],
+    .admin-field input[type="text"] {
+        width:100%; box-sizing:border-box; background:#000; border:1px solid var(--slot-border);
+        color:#fff; padding:10px; font-family:'Oswald', sans-serif; font-size:.95em; border-radius:4px;
+    }
+    .admin-field input:focus { outline:none; border-color: var(--gold); }
+
+    .admin-repo-error {
+        font-size:.85em; margin:0 0 14px; padding:9px 11px; border-radius:4px;
+        background: rgba(194,91,74,.12); border:1px solid var(--danger); color:#f0b3a8;
+    }
+
+    .admin-status {
+        font-size:.85em; margin-top:12px; padding:8px 10px; border-radius:4px;
+        border-left:3px solid var(--gold); display:none; background: rgba(255,255,255,.03);
+    }
+    .admin-status.show { display:block; }
+    .admin-status.success { border-color:#7ac47a; color:#bfe8bf; }
+    .admin-status.error { border-color: var(--danger); color:#f0b3a8; }
+    .admin-status.info { border-color: var(--muted-gold); }
+
+    /* ---- сетка товаров (визуально идентична витрине) ---- */
+    .inventory-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 8px;
+    }
+
+    .item-slot {
+        background: var(--slot-bg);
+        border: 1px solid var(--slot-border);
+        display: flex; flex-direction: column;
+        position: relative;
+    }
+    .item-slot.dragging { opacity:.35; outline:2px dashed var(--gold); }
+
+    .item-image-container {
+        aspect-ratio: 1.3/1;
+        background: #000;
+        display: flex; align-items: center; justify-content: center;
+        position: relative; overflow: hidden;
+    }
+    .item-image-container img { max-width: 100%; max-height: 100%; object-fit: cover; }
+    .img-fallback { position: absolute; font-size: 1.5em; opacity: 0.1; color: var(--gold); }
+
+    .item-details { padding: 8px 6px 10px; text-align: center; }
+
+    .drag-handle {
+        position:absolute; top:4px; left:4px; z-index:3;
+        width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+        background: rgba(0,0,0,.55); border:1px solid var(--muted-gold); border-radius:3px;
+        color: var(--gold); font-size:13px; cursor: grab; touch-action:none; user-select:none;
+    }
+    .drag-handle:active { cursor: grabbing; }
+
+    .remove-btn {
+        position:absolute; top:4px; right:4px; z-index:3;
+        width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+        background: rgba(194,91,74,.25); border:1px solid var(--danger); border-radius:3px;
+        color:#f0b3a8; font-size:14px; line-height:1; cursor:pointer;
+    }
+    .remove-btn:hover { background: var(--danger); color:#fff; }
+
+    .admin-name-input {
+        width:100%; box-sizing:border-box; background:transparent; border:none;
+        border-bottom:1px dashed transparent; color: var(--muted-gold); text-align:center;
+        font-family:'Oswald', sans-serif; font-size:.72em; line-height:1.2; padding:3px 2px;
+        margin-bottom: 6px; min-height: 2.2em;
+    }
+    .admin-name-input:focus { outline:none; border-bottom-color: var(--gold); color:#fff; }
+    .admin-name-input::placeholder { color: var(--slot-border); }
+
+    .admin-price-row { display:flex; align-items:center; justify-content:center; gap:5px; }
+    .admin-price-input {
+        width:56px; background:#000; border:1px solid var(--muted-gold); color: var(--gold);
+        text-align:center; padding:3px; font-size:.85em; border-radius:3px; -moz-appearance:textfield;
+    }
+    .admin-price-input::-webkit-inner-spin-button,
+    .admin-price-input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+    .admin-price-suffix { font-size:.8em; color:#afaca8; }
+
+    .admin-add-tile {
+        border: 2px dashed var(--slot-border); background: transparent;
+        display:flex; align-items:center; justify-content:center; min-height:140px;
+        cursor:pointer; color: var(--muted-gold); font-size:.8em; text-transform:uppercase;
+        letter-spacing:.03em; text-align:center; padding: 10px; transition:.2s;
+    }
+    .admin-add-tile:hover { border-color: var(--gold); color: var(--gold); }
+
+    /* ---- способы получения ---- */
+    .method-row { display:flex; gap:8px; margin-bottom:8px; }
+    .method-row input {
+        flex:1; background:#000; border:1px solid var(--slot-border); color:#fff;
+        padding:9px 10px; border-radius:4px; font-family:'Oswald', sans-serif; font-size:.9em;
+        box-sizing:border-box;
+    }
+    .method-row input:focus { outline:none; border-color: var(--gold); }
+
+    /* ---- прочее ---- */
+    .admin-toast {
+        position:fixed; right:16px; bottom:16px; max-width:320px;
+        background:#151515; border:1px solid var(--gold); color:#fff;
+        padding:12px 16px; border-radius:6px; box-shadow:0 10px 24px rgba(0,0,0,.6);
+        font-size:.88em; z-index:3000;
+    }
+    .admin-toast.error { border-color: var(--danger); }
+    .admin-reconnect-line { font-size:.8em; margin-top:10px; }
+    .admin-reconnect-line a { color: var(--muted-gold); cursor:pointer; text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="sticky-header">
+        <div class="admin-title">Админка магазина<small>Изменения появляются на сайте через 1–3 минуты после сохранения</small></div>
+        <div>
+            <button type="button" class="btn-action" id="reload-btn" hidden>Обновить из GitHub</button>
+            <button type="button" class="btn-action primary" id="save-btn" hidden>Сохранить</button>
+        </div>
+    </div>
+
+    <section class="admin-card" id="connect-panel">
+        <h2>Подключение</h2>
+        <p class="hint">Введите API-ключ, чтобы начать редактирование. Больше ничего указывать не нужно.</p>
+        <form id="connect-form">
+            <input type="hidden" id="cfg-owner">
+            <input type="hidden" id="cfg-repo">
+            <p class="admin-repo-error" id="repo-error-line" hidden>
+                Не удалось определить сайт автоматически. Откройте эту страницу по адресу вашего сайта на GitHub Pages.</p>
+            <label class="admin-field">
+                <span>API-ключ</span>
+                <input type="password" id="cfg-token" placeholder="ghp_… или github_pat_…">
+            </label>
+            <button type="submit" class="btn-action primary">Подключиться</button>
+            <div class="admin-status" id="connect-status"></div>
+        </form>
+    </section>
+
+    <div id="admin-main" hidden>
+        <div class="inventory-grid" id="mainGrid"></div>
+
+        <section class="admin-card" id="methods-card" style="margin-top:20px;">
+            <h2>Способы получения</h2>
+            <p class="hint">Этот список показывается в выпадающем меню «Способ получения» при заполнении шаблона на сайте.</p>
+            <div id="methods-list"></div>
+            <button type="button" class="btn-action" id="add-method-btn">+ Добавить</button>
+        </section>
+
+        <p class="admin-reconnect-line"><a id="disconnect-link">Сменить API-ключ</a></p>
+    </div>
+</div>
+
+<div id="toast" class="admin-toast" hidden></div>
+
+<script>
+/* =========================================================================
+   АДМИНКА — читает и пишет data/items.js и data/methods.js напрямую через
+   GitHub API. Внешний вид витрины (index.html) эта страница не трогает.
+   ========================================================================= */
+
+const API_BASE = new URLSearchParams(location.search).get("apiBase") || "https://api.github.com";
+const CONFIG_KEY = "vtshkiShopAdminConfig_v1";
+const DEFAULT_BRANCH = "main";
+
+function escapeHtml(str){
+  return String(str ?? "").replace(/[&<>"']/g, s => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[s]));
+}
+function escapeAttr(str){ return escapeHtml(str); }
+
+function b64EncodeUnicode(str){
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p) => String.fromCharCode(parseInt(p, 16))));
+}
+function b64DecodeUnicode(str){
+  return decodeURIComponent(atob(str).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+}
+
+// ---------- автоопределение владельца/репозитория по адресу GitHub Pages ----------
+function detectRepoFromLocation(){
+  const m = location.hostname.match(/^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.github\.io$/i);
+  if(!m) return null;
+  const owner = m[1];
+  const parts = location.pathname.split("/").filter(Boolean);
+  const first = parts[0];
+  const looksLikeRootFile = !first || (parts.length === 1 && first.includes("."));
+  const repo = looksLikeRootFile ? `${owner}.github.io` : first;
+  return { owner, repo };
+}
+
+function applyAutoDetect(){
+  const detected = detectRepoFromLocation();
+  const errorLine = document.getElementById("repo-error-line");
+  const ownerInput = document.getElementById("cfg-owner");
+  const repoInput = document.getElementById("cfg-repo");
+  const submitBtn = document.querySelector('#connect-form button[type="submit"]');
+
+  if(detected){
+    ownerInput.value = detected.owner;
+    repoInput.value = detected.repo;
+    errorLine.hidden = true;
+    if(submitBtn) submitBtn.disabled = false;
+  } else {
+    ownerInput.value = "";
+    repoInput.value = "";
+    errorLine.hidden = false;
+    if(submitBtn) submitBtn.disabled = true;
+  }
+}
+
+// ---------- конфиг / localStorage ----------
+function getConfig(){
+  try{ return JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}"); }
+  catch(e){ return {}; }
+}
+function setConfig(cfg){ localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
+function clearConfig(){ localStorage.removeItem(CONFIG_KEY); }
+
+function authHeaders(){
+  const { token } = getConfig();
+  return { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" };
+}
+
+// ---------- GitHub API ----------
+async function ghGetFile(path){
+  const { owner, repo, branch } = getConfig();
+  const url = `${API_BASE}/repos/${owner}/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(branch)}`;
+  const res = await fetch(url, { headers: authHeaders() });
+  if(!res.ok){
+    if(res.status === 404) throw new Error(`Файл ${path} не найден в ${owner}/${repo} (ветка ${branch}).`);
+    if(res.status === 401 || res.status === 403) throw new Error("Токен недействителен или не хватает прав доступа.");
+    throw new Error(`Ошибка загрузки ${path}: HTTP ${res.status}`);
+  }
+  const json = await res.json();
+  const raw = (json.content || "").replace(/\n/g, "");
+  return { content: b64DecodeUnicode(raw), sha: json.sha };
+}
+
+async function ghPutFile(path, content, sha, message){
+  const { owner, repo, branch } = getConfig();
+  const url = `${API_BASE}/repos/${owner}/${repo}/contents/${encodeURI(path)}`;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ message, branch, sha, content: b64EncodeUnicode(content) })
+  });
+  if(!res.ok){
+    let msg = `HTTP ${res.status}`;
+    try{ const j = await res.json(); if(j.message) msg = j.message; }catch(e){}
+    if(res.status === 409) throw new Error("Файл изменился в репозитории с момента загрузки. Нажмите «Обновить из GitHub» и повторите правку.");
+    throw new Error(`Не удалось сохранить ${path}: ${msg}`);
+  }
+  return res.json();
+}
+
+// ---------- описание файлов данных ----------
+const FILES = {
+  items: {
+    path: "data/items.js",
+    dataKey: "items",
+    header: `/* =========================================================================
+   ТОВАРЫ МАГАЗИНА
+   =========================================================================
+   name   — название предмета (используется и для картинки: .../vtshki/НАЗВАНИЕ.png)
+   price  — цена в кролях
+
+   Этот файл можно редактировать и через панель admin.html — она
+   перезаписывает файл целиком, и вручную, как обычно.
+   ========================================================================= */
+`
+  },
+  methods: {
+    path: "data/methods.js",
+    dataKey: "methods",
+    header: `/* =========================================================================
+   СПОСОБЫ ПОЛУЧЕНИЯ
+   =========================================================================
+   Список вариантов, которые показываются в выпадающем списке "Способ
+   получения" при заполнении шаблона заказа. Порядок в списке — это и
+   порядок в выпадающем списке на сайте.
+
+   Этот файл можно редактировать и через панель admin.html — она
+   перезаписывает файл целиком, и вручную, как обычно.
+   ========================================================================= */
+`
+  }
+};
+
+let cache = {}; // { items:{data,sha}, methods:{data,sha} }
+
+async function loadFile(key){
+  const f = FILES[key];
+  const { content, sha } = await ghGetFile(f.path);
+  const fakeWindow = {};
+  try{ new Function("window", content)(fakeWindow); }
+  catch(e){ throw new Error(`Не удалось разобрать ${f.path}: ${e.message}`); }
+  const siteData = fakeWindow.SITE_DATA || {};
+  const data = Array.isArray(siteData[f.dataKey]) ? siteData[f.dataKey] : [];
+  cache[key] = { data, sha };
+}
+
+function buildFileText(key){
+  const f = FILES[key];
+  const data = cache[key].data;
+  return f.header + "window.SITE_DATA = window.SITE_DATA || {};\n\n"
+    + `window.SITE_DATA.${f.dataKey} = ` + JSON.stringify(data, null, 2) + ";\n";
+}
+
+async function commitFile(key, message){
+  const f = FILES[key];
+  const text = buildFileText(key);
+  const result = await ghPutFile(f.path, text, cache[key].sha, message || `Обновление ${f.path} через admin.html`);
+  cache[key].sha = result.content.sha;
+}
+
+// ---------- UI: статус / тосты ----------
+const statusEl = document.getElementById("connect-status");
+function showStatus(msg, kind){
+  statusEl.textContent = msg;
+  statusEl.className = `admin-status show ${kind || ""}`;
+}
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+function showToast(msg, isError){
+  toastEl.textContent = msg;
+  toastEl.className = "admin-toast" + (isError ? " error" : "");
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; }, 5000);
+}
+
+// ---------- сетка товаров ----------
+const grid = document.getElementById("mainGrid");
+
+function imgSrcFor(name){ return `https://achterstem.github.io/vtshki/${name}.png`; }
+
+let dragEl = null;
+function wireDrag(handle){
+  handle.addEventListener("pointerdown", e => {
+    const slot = handle.closest(".item-slot.is-item");
+    if(!slot) return;
+    dragEl = slot;
+    slot.classList.add("dragging");
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  handle.addEventListener("pointermove", e => {
+    if(!dragEl) return;
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    if(!target) return;
+    const overSlot = target.closest(".item-slot.is-item");
+    if(overSlot && overSlot !== dragEl){
+      const children = Array.from(grid.children);
+      const dragIdx = children.indexOf(dragEl);
+      const overIdx = children.indexOf(overSlot);
+      if(dragIdx < overIdx) grid.insertBefore(dragEl, overSlot.nextSibling);
+      else grid.insertBefore(dragEl, overSlot);
+    }
+  });
+  handle.addEventListener("pointerup", () => {
+    if(dragEl) dragEl.classList.remove("dragging");
+    dragEl = null;
+  });
+  handle.addEventListener("pointercancel", () => {
+    if(dragEl) dragEl.classList.remove("dragging");
+    dragEl = null;
+  });
+}
+
+function createItemSlot(item){
+  const slot = document.createElement("div");
+  slot.className = "item-slot is-item";
+  slot.innerHTML = `
+    <div class="drag-handle" title="Перетащить, чтобы изменить порядок">⠿</div>
+    <button type="button" class="remove-btn" title="Удалить предмет">×</button>
+    <div class="item-image-container">
+      <div class="img-fallback"> </div>
+      <img src="${escapeAttr(imgSrcFor(item.name || ""))}" onerror="this.style.display='none'">
+    </div>
+    <div class="item-details">
+      <input type="text" class="admin-name-input" value="${escapeAttr(item.name || "")}" placeholder="Название предмета">
+      <div class="admin-price-row">
+        <input type="number" class="admin-price-input" min="0" step="1" value="${Number(item.price) || 0}">
+        <span class="admin-price-suffix">кроль</span>
+      </div>
+    </div>`;
+
+  const nameInput = slot.querySelector(".admin-name-input");
+  const img = slot.querySelector("img");
+  nameInput.addEventListener("input", () => {
+    img.src = imgSrcFor(nameInput.value);
+    img.style.display = "";
+  });
+  slot.querySelector(".remove-btn").addEventListener("click", () => {
+    if(confirm("Удалить этот предмет?")) slot.remove();
+  });
+  wireDrag(slot.querySelector(".drag-handle"));
+  return slot;
+}
+
+const addTile = document.createElement("div");
+addTile.className = "item-slot admin-add-tile";
+addTile.textContent = "+ Добавить предмет";
+addTile.addEventListener("click", () => {
+  const slot = createItemSlot({ name: "", price: 0 });
+  grid.insertBefore(slot, addTile);
+  slot.querySelector(".admin-name-input").focus();
+  if(typeof slot.scrollIntoView === "function") slot.scrollIntoView({ behavior: "smooth", block: "center" });
+});
+
+function renderGrid(items){
+  grid.innerHTML = "";
+  items.forEach(it => grid.appendChild(createItemSlot(it)));
+  grid.appendChild(addTile);
+}
+
+function collectItemsFromDOM(){
+  return Array.from(grid.querySelectorAll(".item-slot.is-item")).map(slot => ({
+    name: slot.querySelector(".admin-name-input").value.trim(),
+    price: Number(slot.querySelector(".admin-price-input").value) || 0
+  }));
+}
+
+// ---------- способы получения ----------
+const methodsListEl = document.getElementById("methods-list");
+
+function createMethodRow(value){
+  const row = document.createElement("div");
+  row.className = "method-row";
+  row.innerHTML = `<input type="text" class="method-input" value="${escapeAttr(value || "")}" placeholder="Например, ШРК">
+    <button type="button" class="btn-action danger">Удалить</button>`;
+  row.querySelector("button").addEventListener("click", () => row.remove());
+  return row;
+}
+
+function renderMethods(list){
+  methodsListEl.innerHTML = "";
+  list.forEach(v => methodsListEl.appendChild(createMethodRow(v)));
+}
+
+document.getElementById("add-method-btn").addEventListener("click", () => {
+  const row = createMethodRow("");
+  methodsListEl.appendChild(row);
+  row.querySelector("input").focus();
+});
+
+function collectMethodsFromDOM(){
+  return Array.from(document.querySelectorAll(".method-input")).map(el => el.value.trim()).filter(Boolean);
+}
+
+// ---------- сохранение ----------
+const saveBtn = document.getElementById("save-btn");
+const reloadBtn = document.getElementById("reload-btn");
+
+saveBtn.addEventListener("click", async () => {
+  const items = collectItemsFromDOM();
+  const emptyIdx = items.findIndex(it => !it.name);
+  if(emptyIdx !== -1){
+    showToast(`У предмета №${emptyIdx + 1} не указано название.`, true);
+    return;
+  }
+  saveBtn.disabled = true;
+  const oldLabel = saveBtn.textContent;
+  saveBtn.textContent = "Сохраняем…";
+  try{
+    cache.items.data = items;
+    cache.methods.data = collectMethodsFromDOM();
+    await commitFile("items", "Обновление товаров через admin.html");
+    await commitFile("methods", "Обновление способов получения через admin.html");
+    showToast("Сохранено. Сайт обновится за 1–3 минуты.");
+  }catch(err){
+    showToast(err.message, true);
+  }finally{
+    saveBtn.disabled = false;
+    saveBtn.textContent = oldLabel;
+  }
+});
+
+reloadBtn.addEventListener("click", async () => {
+  if(!confirm("Обновить данные из GitHub? Несохранённые изменения на странице будут потеряны.")) return;
+  try{
+    await loadFile("items");
+    await loadFile("methods");
+    renderGrid(cache.items.data);
+    renderMethods(cache.methods.data);
+    showToast("Обновлено из GitHub.");
+  }catch(e){
+    showToast(e.message, true);
+  }
+});
+
+document.getElementById("disconnect-link").addEventListener("click", () => {
+  if(!confirm("Сменить API-ключ? Текущее подключение будет забыто на этом устройстве.")) return;
+  clearConfig();
+  location.reload();
+});
+
+// ---------- подключение ----------
+document.getElementById("connect-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const owner = document.getElementById("cfg-owner").value.trim();
+  const repo = document.getElementById("cfg-repo").value.trim();
+  const branch = DEFAULT_BRANCH;
+  const token = document.getElementById("cfg-token").value.trim();
+  if(!owner || !repo || !token){ showStatus("Не удалось определить сайт или не указан API-ключ.", "error"); return; }
+  setConfig({ owner, repo, branch, token });
+  showStatus("Проверяем доступ…", "info");
+  try{
+    const res = await fetch(`${API_BASE}/repos/${owner}/${repo}`, { headers: authHeaders() });
+    if(!res.ok){
+      if(res.status === 404) throw new Error("Сайт не найден или нет доступа.");
+      if(res.status === 401 || res.status === 403) throw new Error("Ключ недействителен, просрочен или не даёт доступа к этому сайту.");
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const info = await res.json();
+    const canPush = info.permissions && info.permissions.push;
+
+    await loadFile("items");
+    await loadFile("methods");
+    renderGrid(cache.items.data);
+    renderMethods(cache.methods.data);
+
+    document.getElementById("connect-panel").hidden = true;
+    document.getElementById("admin-main").hidden = false;
+    saveBtn.hidden = false;
+    reloadBtn.hidden = false;
+
+    if(!canPush) showToast("Подключились, но у ключа нет прав на запись. Сохранить изменения не получится.", true);
+  }catch(err){
+    showStatus("Ошибка подключения: " + err.message, "error");
+    document.getElementById("admin-main").hidden = true;
+  }
+});
+
+// ---------- автозаполнение при открытии, если ключ уже сохранён ----------
+(function init(){
+  applyAutoDetect();
+  const cfg = getConfig();
+  if(cfg.token) document.getElementById("cfg-token").value = cfg.token;
+  const owner = document.getElementById("cfg-owner").value;
+  const repo = document.getElementById("cfg-repo").value;
+  if(owner && repo && cfg.token){
+    document.getElementById("connect-form").requestSubmit();
+  }
+})();
+</script>
+</body>
+</html>
