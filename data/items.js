@@ -417,9 +417,5 @@ window.SITE_DATA.items = [
   {
     "name": "Пак 'Шаманизм'",
     "price": 70
-  },
-  {
-    "name": "Поук",
-    "price": 50
   }
 ];
