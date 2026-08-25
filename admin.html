@@ -224,7 +224,7 @@
     </section>
 
     <div id="admin-main" hidden>
-        <p class="hint" style="margin:0 0 12px;">Иконка <strong>🖼</strong> в углу товара — загрузить или заменить картинку. Изображение обрезается до квадрата 70×70 и при сохранении записывается в репозиторий под именем товара (как указано в поле «Название предмета»).</p>
+        <p class="hint" style="margin:0 0 12px;">Иконка <strong>🖼</strong> в углу товара — загрузить или заменить картинку. Изображение обрезается до квадрата 70×70 и при сохранении записывается в репозиторий под именем товара (как указано в поле «Название предмета»). При удалении товара его картинка тоже удаляется из репозитория — но тоже только при нажатии «Сохранить».</p>
         <div class="inventory-grid" id="mainGrid"></div>
 
         <section class="admin-card" id="methods-card" style="margin-top:20px;">
@@ -416,6 +416,10 @@ function imgSrcFor(name){ return `https://achterstem.github.io/vtshki/${name}.pn
 // которые ещё не сохранены в репозиторий
 const pendingImages = new Map();
 
+// имена товаров, чьи картинки нужно удалить из репозитория при сохранении
+// (товар был удалён из списка кнопкой "Удалить предмет")
+const pendingDeletions = new Set();
+
 // Приводит любой выбранный файл-картинку к квадратному PNG нужного размера
 // (обрезка по центру, как у существующих иконок 70×70), возвращает base64.
 function imageFileToSquarePngBase64(file, size){
@@ -460,6 +464,34 @@ async function commitPendingImages(){
     await ghPutFile(path, base64, sha, `Загрузка картинки «${name}» через admin.html`, true);
     pendingImages.delete(slot);
     slot.querySelector(".img-upload-btn").classList.remove("has-pending");
+  }
+}
+
+async function ghDeleteFile(path, sha, message){
+  const { owner, repo, branch } = getConfig();
+  const url = `${API_BASE}/repos/${owner}/${repo}/contents/${encodeURI(path)}`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ message, branch, sha })
+  });
+  if(!res.ok){
+    let msg = `HTTP ${res.status}`;
+    try{ const j = await res.json(); if(j.message) msg = j.message; }catch(e){}
+    throw new Error(`Не удалось удалить ${path}: ${msg}`);
+  }
+}
+
+// Удаляет из репозитория картинки удалённых товаров. keepNames — имена
+// товаров, которые остались в списке (или появились заново под тем же
+// именем) — их картинки трогать нельзя.
+async function commitPendingDeletions(keepNames){
+  for(const name of Array.from(pendingDeletions)){
+    pendingDeletions.delete(name);
+    if(keepNames.has(name)) continue;
+    const path = `${name}.png`;
+    const sha = await ghGetSha(path);
+    if(sha) await ghDeleteFile(path, sha, `Удаление картинки «${name}» через admin.html`);
   }
 }
 
@@ -524,7 +556,12 @@ function createItemSlot(item){
     img.style.display = "";
   });
   slot.querySelector(".remove-btn").addEventListener("click", () => {
-    if(confirm("Удалить этот предмет?")){ pendingImages.delete(slot); slot.remove(); }
+    if(confirm("Удалить этот предмет? Картинка тоже будет удалена из репозитория при сохранении.")){
+      const name = nameInput.value.trim();
+      pendingImages.delete(slot);
+      if(name) pendingDeletions.add(name);
+      slot.remove();
+    }
   });
   wireDrag(slot.querySelector(".drag-handle"));
 
@@ -566,6 +603,7 @@ addTile.addEventListener("click", () => {
 
 function renderGrid(items){
   pendingImages.clear();
+  pendingDeletions.clear();
   grid.innerHTML = "";
   items.forEach(it => grid.appendChild(createItemSlot(it)));
   grid.appendChild(addTile);
@@ -620,6 +658,7 @@ saveBtn.addEventListener("click", async () => {
   try{
     cache.items.data = items;
     cache.methods.data = collectMethodsFromDOM();
+    await commitPendingDeletions(new Set(items.map(it => it.name)));
     await commitPendingImages();
     await commitFile("items", "Обновление товаров через admin.html");
     await commitFile("methods", "Обновление способов получения через admin.html");
