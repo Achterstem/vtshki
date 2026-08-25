@@ -199,7 +199,7 @@
 
 <div class="container">
     <div class="sticky-header">
-        <div class="admin-title">Админка магазина<small>Изменения появляются на сайте через 1–3 минуты после сохранения!!!</small></div>
+        <div class="admin-title">Админка магазина<small>Изменения появляются на сайте через 1–5 минут после сохранения!!!</small></div>
         <div>
             <button type="button" class="btn-action" id="reload-btn" hidden>Обновить из GitHub</button>
             <button type="button" class="btn-action primary" id="save-btn" hidden>Сохранить</button>
@@ -208,7 +208,7 @@
 
     <section class="admin-card" id="connect-panel">
         <h2>Подключение</h2>
-        <p class="hint">пароль</p>
+        <p class="hint">Пароль</p>
         <form id="connect-form">
             <input type="hidden" id="cfg-owner">
             <input type="hidden" id="cfg-repo">
@@ -224,12 +224,11 @@
     </section>
 
     <div id="admin-main" hidden>
-        <p class="hint" style="margin:0 0 12px;">Иконка 🖼 в углу товара — загрузить или заменить картинку. При клике на название предмета можно его изменить. Иконка ⠿ — передвинуть предмет.</p>
+        <p class="hint" style="margin:0 0 12px;">Иконка 🖼 в углу товара — загрузить или заменить картинку. ⠿ - переместить предмет. Клик на название предмета - поменять/задать имя предмету. ЧТОБЫ СЛУЧАЙНО НИЧЕГО НЕ СЛОМАТЬ, ЛУЧШЕ СОХРАНЯТЬ КАЖДОЕ ДЕЙСТВИЕ (удалил предмет - сохранил, создал предмет - сохранил)</p>
         <div class="inventory-grid" id="mainGrid"></div>
 
         <section class="admin-card" id="methods-card" style="margin-top:20px;">
             <h2>Способы получения</h2>
-            <p class="hint">Добавить / поменять / удалить способы доставки.</p>
             <div id="methods-list"></div>
             <button type="button" class="btn-action" id="add-method-btn">+ Добавить</button>
         </section>
@@ -452,6 +451,18 @@ async function ghGetSha(path){
   return json.sha;
 }
 
+// содержимое файла как есть, в base64 (без декодирования — для картинок),
+// или null, если файла нет
+async function ghGetRawBase64(path){
+  const { owner, repo, branch } = getConfig();
+  const url = `${API_BASE}/repos/${owner}/${repo}/contents/${encodeURI(path)}?ref=${encodeURIComponent(branch)}`;
+  const res = await fetch(url, { headers: authHeaders() });
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error(`Не удалось получить файл ${path}: HTTP ${res.status}`);
+  const json = await res.json();
+  return { content: (json.content || "").replace(/\n/g, ""), sha: json.sha };
+}
+
 // Загружает в репозиторий все картинки, выбранные через 🖼, под именем товара
 async function commitPendingImages(){
   for(const slot of Array.from(grid.querySelectorAll(".item-slot.is-item"))){
@@ -495,6 +506,31 @@ async function commitPendingDeletions(keepNames){
   }
 }
 
+// Если у товара изменилось название — переносит существующую картинку
+// на новое имя (если для этого товара не была выбрана новая картинка
+// через 🖼) и удаляет файл под старым именем, если оно больше не занято.
+async function commitPendingRenames(keepNames){
+  for(const slot of Array.from(grid.querySelectorAll(".item-slot.is-item"))){
+    const origName = slot.dataset.originalName || "";
+    const newName = slot.querySelector(".admin-name-input").value.trim();
+    if(!origName || origName === newName) continue;
+
+    if(!pendingImages.has(slot)){
+      const old = await ghGetRawBase64(`${origName}.png`);
+      if(old){
+        const destSha = await ghGetSha(`${newName}.png`);
+        await ghPutFile(`${newName}.png`, old.content, destSha,
+          `Переименование картинки «${origName}» → «${newName}» через admin.html`, true);
+      }
+    }
+    if(!keepNames.has(origName)){
+      const sha = await ghGetSha(`${origName}.png`);
+      if(sha) await ghDeleteFile(`${origName}.png`, sha,
+        `Удаление старой картинки «${origName}» после переименования через admin.html`);
+    }
+  }
+}
+
 let dragEl = null;
 function wireDrag(handle){
   handle.addEventListener("pointerdown", e => {
@@ -531,6 +567,7 @@ function wireDrag(handle){
 function createItemSlot(item){
   const slot = document.createElement("div");
   slot.className = "item-slot is-item";
+  slot.dataset.originalName = item.name || ""; // для отслеживания переименования картинки
   slot.innerHTML = `
     <div class="drag-handle" title="Перетащить, чтобы изменить порядок">⠿</div>
     <button type="button" class="remove-btn" title="Удалить предмет">×</button>
@@ -658,10 +695,15 @@ saveBtn.addEventListener("click", async () => {
   try{
     cache.items.data = items;
     cache.methods.data = collectMethodsFromDOM();
-    await commitPendingDeletions(new Set(items.map(it => it.name)));
+    const keepNames = new Set(items.map(it => it.name));
+    await commitPendingDeletions(keepNames);
+    await commitPendingRenames(keepNames);
     await commitPendingImages();
     await commitFile("items", "Обновление товаров через admin.html");
     await commitFile("methods", "Обновление способов получения через admin.html");
+    grid.querySelectorAll(".item-slot.is-item").forEach(slot => {
+      slot.dataset.originalName = slot.querySelector(".admin-name-input").value.trim();
+    });
     showToast("Сохранено. Сайт обновится за 1–3 минуты.");
   }catch(err){
     showToast(err.message, true);
