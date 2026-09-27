@@ -421,5 +421,9 @@ window.SITE_DATA.items = [
   {
     "name": "Аппетитный бургер",
     "price": 15
+  },
+  {
+    "name": "Пойманный в шторм",
+    "price": 40
   }
 ];
